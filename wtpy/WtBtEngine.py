@@ -368,7 +368,10 @@ class WtBtEngine:
         '''
         self.__wrapper__.set_time_range(beginTime, endTime)
 
-    def set_cta_strategy(self, strategy:BaseCtaStrategy, slippage:int = 0, hook:bool = False, persistData:bool = True, incremental:bool = False, isRatioSlp:bool = False):
+    def set_cta_strategy(self, strategy:BaseCtaStrategy, slippage:int = 0, hook:bool = False,
+                         persistData:bool = True, incremental:bool = False,
+                         isRatioSlp:bool = False, fill_model:str = "legacy_cta",
+                         event_delay:int = 0, participation_rate:float = 0.0):
         '''
         添加CTA策略
         @strategy   策略对象
@@ -377,8 +380,15 @@ class WtBtEngine:
         @persistData    回测生成的数据是否落地, 默认为True
         @incremental    是否增量回测, 默认为False, 如果为True, 则会自动根据策略ID到output_bt目录下加载对应的数据
         @isRatioSlp     滑点是否是比例, 默认为False, 如果为True, 则slippage为万分比
+        @fill_model     成交模型：legacy_cta、causal_touch 或 volume_limited
+        @event_delay    因果模型在下一事件之外额外等待的事件数
+        @participation_rate    volume_limited 的每 Tick 市场成交量参与率；实验性口径
         '''
-        ctxid = self.__wrapper__.init_cta_mocker(strategy.name(), slippage, hook, persistData, incremental, isRatioSlp)
+        ctxid = self.__wrapper__.init_cta_mocker(strategy.name(), slippage, hook,
+                                                  persistData, incremental, isRatioSlp,
+                                                  fill_model, event_delay, participation_rate)
+        if ctxid == 0:
+            raise RuntimeError("CTA 回测上下文初始化失败；请检查 fill_model/event_delay 与 C++ 日志")
         self.__context__ = CtaContext(ctxid, strategy, self.__wrapper__, self)
 
     def set_hft_strategy(self, strategy:BaseHftStrategy, hook:bool = False):

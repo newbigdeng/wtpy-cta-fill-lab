@@ -10,6 +10,7 @@ from .PlatformHelper import PlatformHelper as ph
 from wtpy.WtUtilDefs import singleton
 from wtpy.WtDataDefs import WtNpKline, WtNpOrdDetails, WtNpOrdQueues, WtNpTicks, WtNpTransactions
 import os
+import math
 
 # Python对接C接口的库
 @singleton
@@ -30,7 +31,9 @@ class WtBtWrapper:
         paths = os.path.split(__file__)
         dllname = ph.getModule("WtBtPorter")
         a = (paths[:-1] + (dllname,))
-        _path = os.path.join(*a)
+        # 允许开发环境显式指定新编译的 Debug 库；不覆盖 wtpy 自带的动态库。
+        # 未设置时完全沿用原路径，老项目不受影响。
+        _path = os.environ.get("WTPY_BT_PORTER_LIB") or os.path.join(*a)
         self.api = cdll.LoadLibrary(_path)
             
         self.api.get_version.restype = c_char_p
@@ -101,6 +104,26 @@ class WtBtWrapper:
 
         self.api.set_time_range.argtypes = [c_uint64, c_uint64]
         self.api.enable_tick.argtypes = [c_bool]
+
+        # 旧入口的签名不变；只有显式选择新模型时才需要新动态库的 v2 符号。
+        self.api.init_cta_mocker.argtypes = [c_char_p, c_int, c_bool, c_bool, c_bool, c_bool]
+        self.api.init_cta_mocker.restype = c_ulong
+        try:
+            cta_v2 = self.api.init_cta_mocker_v2
+        except AttributeError:
+            cta_v2 = None
+        if cta_v2 is not None:
+            cta_v2.argtypes = [c_char_p, c_int, c_bool, c_bool, c_bool, c_bool,
+                               c_char_p, c_uint64]
+            cta_v2.restype = c_ulong
+        try:
+            cta_v3 = self.api.init_cta_mocker_v3
+        except AttributeError:
+            cta_v3 = None
+        if cta_v3 is not None:
+            cta_v3.argtypes = [c_char_p, c_int, c_bool, c_bool, c_bool, c_bool,
+                               c_char_p, c_uint64, c_double]
+            cta_v3.restype = c_ulong
 
         self.api.get_raw_stdcode.restype = c_char_p
 
@@ -1221,7 +1244,10 @@ class WtBtWrapper:
 
     ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
     '''本地撮合接口'''
-    def init_cta_mocker(self, name:str, slippage:int = 0, hook:bool = False, persistData:bool = True, incremental:bool = False, isRatioSlp:bool = False) -> int:
+    def init_cta_mocker(self, name:str, slippage:int = 0, hook:bool = False,
+                        persistData:bool = True, incremental:bool = False,
+                        isRatioSlp:bool = False, fill_model:str = "legacy_cta",
+                        event_delay:int = 0, participation_rate:float = 0.0) -> int:
         '''
         创建策略环境
         @name       策略名称 
@@ -1230,9 +1256,47 @@ class WtBtWrapper:
         @persistData    回测生成的数据是否落地, 默认为True
         @incremental    是否增量回测, 默认为False
         @isRatioSlp     滑点是否是比例, 默认为False, 如果为True, 则slippage为万分比
+        @fill_model     legacy_cta、causal_touch 或 volume_limited
+        @event_delay    因果模型额外等待的回放事件数，必须为非负整数
+        @participation_rate    volume_limited 的实验性参与率，范围 (0,1]
         @return    系统内策略ID
         '''
-        return self.api.init_cta_mocker(bytes(name, encoding = "utf8"), slippage, hook, persistData, incremental, isRatioSlp)
+        if fill_model not in ("legacy_cta", "causal_touch", "volume_limited"):
+            raise ValueError("fill_model must be legacy_cta, causal_touch or volume_limited")
+        if isinstance(event_delay, bool) or not isinstance(event_delay, int) \
+                or not 0 <= event_delay <= (1 << 64) - 1:
+            raise ValueError("event_delay must be an unsigned 64-bit integer")
+        if fill_model == "legacy_cta" and event_delay != 0:
+            raise ValueError("event_delay requires fill_model='causal_touch'")
+        if isinstance(participation_rate, bool) or not isinstance(participation_rate, (int, float)) \
+                or not math.isfinite(participation_rate):
+            raise ValueError("participation_rate must be finite")
+        if fill_model == "volume_limited":
+            if not 0 < participation_rate <= 1:
+                raise ValueError("volume_limited requires 0 < participation_rate <= 1")
+        elif participation_rate != 0:
+            raise ValueError("participation_rate requires fill_model='volume_limited'")
+
+        encoded_name = bytes(name, encoding="utf8")
+        if fill_model == "legacy_cta":
+            return self.api.init_cta_mocker(encoded_name, slippage, hook,
+                                            persistData, incremental, isRatioSlp)
+
+        if fill_model == "volume_limited":
+            try:
+                cta_v3 = self.api.init_cta_mocker_v3
+            except AttributeError as exc:
+                raise RuntimeError("volume_limited requires a Day16 WtBtPorter library") from exc
+            return cta_v3(encoded_name, slippage, hook, persistData, incremental,
+                          isRatioSlp, bytes(fill_model, encoding="ascii"),
+                          event_delay, participation_rate)
+
+        try:
+            cta_v2 = self.api.init_cta_mocker_v2
+        except AttributeError as exc:
+            raise RuntimeError("causal_touch requires a Day13 WtBtPorter library") from exc
+        return cta_v2(encoded_name, slippage, hook, persistData, incremental,
+                      isRatioSlp, bytes(fill_model, encoding="ascii"), event_delay)
 
     def init_hft_mocker(self, name:str, hook:bool = False) -> int:
         '''
