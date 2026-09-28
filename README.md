@@ -6,7 +6,7 @@
 
 CTA 策略通过 `CtaContext` 使用接口，`WtBtEngine` 负责回测配置与启动，`WtBtWrapper` 调用底层 `WtBtPorter` 动态库。历史数据回放、模拟成交和记账仍在 C++ 侧。仓库里的 `apps/` 放分析、优化等工具，`monitor/` 是原版监控模块；它们不是这次改动的范围。
 
-![Python 与 C++ 的 CTA 回测路径](docs/images/cta-backtest-architecture.png)
+![Python 与 C++ 的 CTA 回测路径](docs/images/cta-backtest-architecture-zh.png)
 
 图只画 CTA 回测的主要调用和数据路径。`CtaFillModel` 属于配套 WT 仓库的 C++ 代码，不是 wtpy 的 Python 类。
 
