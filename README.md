@@ -1,6 +1,10 @@
 # wtpy：CTA 回测接口改动
 
-这个仓库基于 [wtpy 原版](https://github.com/wondertrader/wtpy)，不是 wtpy 官方仓库。wtpy 原有的策略接口、数据组件、监控和回测封装都来自原项目；我在这里改的是 CTA 回测成交模型的 Python 入口，以及几份用于核对回测结果的脚本。对应的 C++ 改动在 [wondertrader-cta-fill-lab](https://github.com/newbigdeng/wondertrader-cta-fill-lab)。
+这个仓库基于 [wtpy 原版](https://github.com/wondertrader/wtpy)，不是 wtpy 官方仓库。
+
+原版 wtpy 是构建在 [WonderTrader](https://github.com/wondertrader/wondertrader) C++ 核心之上的 Python 3 子框架。它让用户通过 Python 编写 CTA、HFT、SEL 策略，配置回测与交易运行、访问和转换行情数据，并提供回测分析、参数优化及运行监控等工具。底层的行情处理、策略引擎和交易执行由 WT 的 C++ 组件承担，wtpy 负责 Python 接口与应用层封装。
+
+wtpy 原有的策略接口、数据组件、监控和回测封装都来自原项目；我在这里改的是 CTA 回测成交模型的 Python 入口，以及几份用于核对回测结果的脚本。对应的 C++ 改动在 [wondertrader-cta-fill-lab](https://github.com/newbigdeng/wondertrader-cta-fill-lab)。
 
 ## 原版 wtpy 怎么接 WT
 
